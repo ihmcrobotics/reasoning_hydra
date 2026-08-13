@@ -4,13 +4,14 @@
   <version>2.0.0</version>
   <description>Reasoning scene graph package</description>
 
+  <author email="achatterjee@ihmc.org">Arghya Chatterjee</author>
   <author email="albert.g.puigjaner@ntnu.no">Albert Gassol</author>
   <author email="na26933@mit.edu">Nathan Hughes</author>
-  <maintainer email="albert.g.puigjaner@ntnu.no">Albert Gassol</maintainer>
+  <maintainer email="achatterjee@ihmc.org">Arghya Chatterjee</maintainer>
 
   <license>BSD</license>
 
-  <buildtool_depend>cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
   <depend>config_utilities</depend>
   <depend>eigen</depend>
   <depend>gtsam</depend>
@@ -22,7 +23,7 @@
   <depend>libpcl-all-dev</depend>
 
   <export>
-    <build_type>cmake</build_type>
+    <build_type>ament_cmake</build_type>
   </export>
 
 </package>

@@ -17,6 +17,7 @@ option(HYDRA_ENABLE_ROS_INSTALL_LAYOUT "Install binaries to ROS location" ON)
 option(BUILD_SHARED_LIBS "Build shared libs" ON)
 
 find_package(config_utilities REQUIRED)
+find_package(ament_cmake REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(GTSAM REQUIRED)
 find_package(kimera_pgmo REQUIRED)
@@ -79,3 +80,10 @@ if(HYDRA_ENABLE_TESTS)
 endif()
 
 include(HydraInstall)
+
+# Runtime launch files consume these through the ament resource index. The
+# original catkin package exposed the source-tree config directory implicitly;
+# an installed ROS 2 workspace must install it explicitly. ament_package()
+# also generates the AMENT_PREFIX_PATH hook required for ROS package lookup.
+install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
+ament_package()
