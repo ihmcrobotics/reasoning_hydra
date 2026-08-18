@@ -120,19 +120,43 @@ rosbag play <bag_to_play> --topics /tf /camera/aligned_depth_to_color/image_raw/
 
 ### Task Reasoning
 
-The **reasoning module** (VLM + LLMs) requires an **internet connection**.
+Reasoning Hydra augments the hierarchical scene graph with object
+relationships and task-aware navigation. It separates candidate retrieval,
+relationship evaluation, and graph path generation:
 
-- LLM queries are done via **OpenAI API**.
-- A large VLM is hosted externally (setup instructions: [semantic_inference_ros](https://github.com/ntnu-arl/semantic_inference_ros))
-
-**IMPORTANT:** When using the reasoning module, set your OpenAI and FastAPI (see https://github.com/ntnu-arl/semantic_inference_ros) keys as environment variables before launching the ROS nodes:
-```bash
-export OPENAI_API_KEY=<Your OpenAI API Key>
-export FASTAPI_API_KEY=<Your server FastAPI Key>
+```text
+Structured task objects and embeddings
+        ↓
+ObjectSearchModule
+Retrieves candidate object nodes from the scene graph
+        ↓
+Candidate objects and their active relationships
+        ↓
+External semantic/VLM reasoning bridge
+Selects relationships relevant to the task
+        ↓
+NavigationModule
+Computes graph paths to the selected objects
+        ↓
+Navigation result
 ```
 
-Once the scene graph is constructed, either:
+The core package owns the graph-side operations:
 
-1. Use the provided **rviz GUI** to interact with the service and visualize task reasoning results on the scene graph.
+- maintaining object and relationship information in the scene graph;
+- searching object nodes using semantic query embeddings;
+- publishing candidate objects and active object relationships;
+- accepting selected task-relevant objects from a reasoning bridge;
+- computing paths over the place graph, including Dijkstra search; and
+- publishing the resulting navigation candidates and paths.
 
-2. Or call the [ROS service](https://github.com/ntnu-arl/semantic_inference_ros/blob/master/semantic_inference_msgs/srv/NavigationPrompt.srv):  ```/semantic_inference/navigation_prompt_service/navigation_prompt```
+Natural-language parsing, image segmentation, language embeddings, and VLM
+inference are integration-layer responsibilities. They may be implemented with
+different models as long as they publish the message and feature formats
+expected by Reasoning Hydra. The IHMC ROS 2 workspace currently connects local
+Qwen instruction parsing, OpenCLIP retrieval, Qwen3VL relationship features,
+and Cosmos-Reason2 reasoning.
+
+For ROS 2 launch order, model configuration, topics, services, and the complete
+runtime flow, see the
+[reasoning-hydra-sg integration README](https://github.com/ihmcrobotics/reasoning-hydra-sg).
