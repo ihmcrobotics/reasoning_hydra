@@ -2,7 +2,9 @@
 
 This package implements an **enhanced hierarchical 3D scene graph** based on [Hydra](https://github.com/MIT-SPARK/Hydra/tree/main), integrating open-vocabulary features for rooms and objects, and supporting object-relational reasoning.
 
-We leverage a **Vision-Language Model (VLM)** to infer semantic relationships. Additionally, we introduce a **task reasoning module** that combines **Large Language Models (LLM)** and a VLM to interpret the scene graph’s semantic and relational information, enabling agents to reason about tasks and interact with their environment intelligently.
+A **Vision-Language Model (VLM)** infers semantic relationships. A separate
+**task reasoning module** combines language and vision-language models to
+interpret semantic and relational scene-graph information for task planning.
 
 <div align="center">
     <img src="assets/demo.png" alt="Demo Scene Graph">
@@ -75,7 +77,7 @@ roslaunch hydra_ros replica.launch
 Publish the data:
 
 ```bash
-roslaunch hydra_ros publish_replica.launch dataset_path:=<Path to your replica dataset> scene_name:=<Scene name>
+roslaunch hydra_ros publish_replica.launch dataset_path:=<replica-dataset-path> scene_name:=<scene-name>
 ```
 
 #### Habitat-Matterport 3D Semantics Dataset
@@ -91,7 +93,7 @@ roslaunch hydra_ros publish_hm3dsem.launch dataset_path:=<Path to hm3d_trajector
 
 #### Robot Deployment
 
-To run the scene graph on your robot:
+Robot deployment requires:
 
 - Robot must provide posed RGB-D data as `sensor_msgs/Image`
 - Pose must be provided via **TFs**
@@ -102,7 +104,8 @@ Update [robot.launch](https://github.com/ntnu-arl/reasoning_hydra_ros/blob/maste
 roslaunch hydra_ros robot.launch
 ```
 
-We provide recorded data from experiments with an ANYMal robot. Download it [here](https://huggingface.co/datasets/ntnu-arl/reasoning-graph-dataset).
+Recorded data for the Alex robot configuration is available from the
+[Reasoning Graph Dataset](https://huggingface.co/datasets/ntnu-arl/reasoning-graph-dataset).
 
 To use this data:
 
