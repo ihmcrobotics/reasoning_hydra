@@ -6,6 +6,21 @@ A **Vision-Language Model (VLM)** infers semantic relationships. A separate
 **task reasoning module** combines language and vision-language models to
 interpret semantic and relational scene-graph information for task planning.
 
+For the IHMC custom YOLOv8 model, Hydra uses
+`config/label_spaces/ihmc_custom_yolov8_label_space.yaml`. This preserves the
+original Alex IDs, adds the IHMC-specific object classes, and excludes the
+robot's own `robot_hand` detection from scene-graph objects. `person_operator`
+is retained as a separate dynamic class for designated personnel wearing an
+identifying vest, while `trash_can` and `bottle` reuse the existing Alex
+concepts.
+
+Door components remain distinct: `door` is the complete semantic assembly,
+`door_panel` is movable, and `door_frame` is fixed and should provide the
+navigation position. The current custom model does not detect `door_frame`, so
+stable door assembly and panel-to-frame association require a future model (or
+another frame detector); the movable panel is not silently treated as the
+permanent door pose.
+
 <div align="center">
     <img src="assets/demo.png" alt="Demo Scene Graph">
 </div>
