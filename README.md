@@ -1,6 +1,16 @@
 # <div align="center">Relationship-Aware Hierarchical 3D Scene Graph</div>
 
-This package implements an **enhanced hierarchical 3D scene graph** based on [Hydra](https://github.com/MIT-SPARK/Hydra/tree/main), integrating open-vocabulary features for rooms and objects, and supporting object-relational reasoning.
+This package implements an **enhanced hierarchical 3D scene graph** based on
+[Hydra](https://github.com/MIT-SPARK/Hydra/tree/main). It adds
+open-vocabulary features for rooms and objects, object relationships, semantic
+object search, and graph-based navigation.
+
+> **Running the IHMC ROS 2 system:** Users who want to build, launch, or deploy
+> Reasoning Hydra can go directly to the
+> [IHMC Reasoning Hydra README](../ihmc_reasoning_hydra/README.md). It contains
+> the recommended Docker workflow, local installation, model provisioning,
+> launch files, sensor topics, and runtime configuration. The remainder of
+> this document describes the core `hydra` package and its architecture.
 
 A **Vision-Language Model (VLM)** infers semantic relationships. A separate
 **task reasoning module** combines language and vision-language models to
@@ -25,118 +35,25 @@ permanent door pose.
     <img src="assets/demo.png" alt="Demo Scene Graph">
 </div>
 
-## Setup
+## Core package
 
-### General Requirements
+The ROS package name is `hydra`. It is an `ament_cmake` C++ library that owns
+the scene-graph algorithms and configuration. ROS 2 nodes, message bridges,
+semantic inference, model downloads, launch orchestration, and Docker wrappers
+live in the surrounding workspace packages.
 
-These instructions assume that `python 3.12` and `ros-jazzy-desktop-full` is installed on **Ubuntu 24.04**.
-
-Install general dependencies:
-
-```bash
-sudo apt install python3-rosdep python3-catkin-tools python3-vcstool
-```
-
-### Building
-
-Build the repository in **Release mode**:
+To build the core package and its in-workspace dependencies from the
+`reasoning-hydra-sg` repository root:
 
 ```bash
-cd src
-git clone git@github.com:ntnu-arl/reasoning_hydra.git
-vcs import . < reasoning_hydra/install/packages.repos
-rosdep install --from-paths . --ignore-src -r -y
-
-cd ..
-colcon build
+source /opt/ros/jazzy/setup.bash
+colcon build --symlink-install --packages-up-to hydra
 ```
 
-### Python Environment for Semantics and Reasoning
+For a complete deployment, use the integration instructions linked at the top
+instead of building or launching this package in isolation.
 
-Follow the instructions in [semantic_inference_ros](https://github.com/ntnu-arl/semantic_inference_ros) to set up the Python environment required to run the semantic and reasoning models.
-
----
-
-## Usage
-
-### Scene Graph Construction
-
-The system supports multiple datasets and online deployment on robots with GPU capabilities (e.g., **Nvidia Jetson Orin AGX**).
-
-#### Uhumans2
-
-Download rosbags from [Uhumans2 dataset](https://web.mit.edu/sparklab/datasets/uHumans2/).
-
-Start the scene graph:
-
-```bash
-roslaunch hydra_ros uhumans2.launch
-```
-
-In a separate terminal, play the rosbag:
-
-```bash
-rosbag play path/to/rosbag
-```
-
-#### Replica
-
-Follow [NICE-SLAM instructions](https://github.com/cvg/nice-slam#replica-1) to download posed RGB-D data from Replica scenes.
-
-Run the scene graph:
-
-```bash
-roslaunch hydra_ros replica.launch
-```
-
-Publish the data:
-
-```bash
-roslaunch hydra_ros publish_replica.launch dataset_path:=<replica-dataset-path> scene_name:=<scene-name>
-```
-
-#### Habitat-Matterport 3D Semantics Dataset
-
-Follow [HOV-SG instructions](https://github.com/hovsg/HOV-SG?tab=readme-ov-file#habitat-matterport-3d-semantics) (Step 2 can be skipped) to download posed RGB-D data from several scenes.
-
-Run the scene graph:
-
-```bash
-roslaunch hydra_ros hm3dsem.launch
-roslaunch hydra_ros publish_hm3dsem.launch dataset_path:=<Path to hm3d_trajectories> scene_name:=<Scene name>
-```
-
-#### Robot Deployment
-
-Robot deployment requires:
-
-- Robot must provide posed RGB-D data as `sensor_msgs/Image`
-- Pose must be provided via **TFs**
-
-Update [robot.launch](https://github.com/ntnu-arl/reasoning_hydra_ros/blob/master/hydra_ros/launch/robot.launch) with the correct TFs and camera topic names, then run:
-
-```bash
-roslaunch hydra_ros robot.launch
-```
-
-Recorded data for the Alex robot configuration is available from the
-[Reasoning Graph Dataset](https://huggingface.co/datasets/ntnu-arl/reasoning-graph-dataset).
-
-To use this data:
-
-```bash
-roslaunch hydra_ros robot.launch playback_mode:=True
-```
-
-Then play one of the downloaded rosbags:
-
-```bash
-rosbag play <bag_to_play> --topics /tf /camera/aligned_depth_to_color/image_raw/compressedDepth /camera/color/camera_info /camera/color/image_raw/compressed --clock
-```
-
----
-
-### Task Reasoning
+## Scene-graph reasoning
 
 Reasoning Hydra augments the hierarchical scene graph with object
 relationships and task-aware navigation. It separates candidate retrieval,
@@ -175,6 +92,15 @@ expected by Reasoning Hydra. The IHMC ROS 2 workspace currently connects local
 Qwen instruction parsing, OpenCLIP retrieval, Qwen3VL relationship features,
 and Cosmos-Reason2 reasoning.
 
-For ROS 2 launch order, model configuration, topics, services, and the complete
-runtime flow, see the
-[reasoning-hydra-sg integration README](https://github.com/ihmcrobotics/reasoning-hydra-sg).
+## Package boundaries
+
+| Responsibility | Package or documentation |
+| --- | --- |
+| Scene-graph construction, object search, relationships, and navigation algorithms | This `hydra` package |
+| ROS 2 subscriptions, publishers, and reasoning/navigation bridges | `hydra_ros` |
+| Segmentation, embeddings, task parsing, and VLM inference | `semantic_inference_ros` |
+| IHMC launch orchestration, model provisioning, Docker, and deployment | [`ihmc_reasoning_hydra`](../ihmc_reasoning_hydra/README.md) |
+| Workspace overview and external visualization contract | [reasoning-hydra-sg README](../../README.md) |
+
+This separation keeps the core algorithms independent of a particular camera,
+robot, model provider, or deployment environment.
