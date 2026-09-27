@@ -141,6 +141,16 @@ void ElapsedTimeRecorder::record(const std::string& timer_name,
   stamps_[timer_name].push_back(timestamp);
 }
 
+void ElapsedTimeRecorder::recordBatch(
+    uint64_t timestamp,
+    std::initializer_list<std::pair<const char*, std::chrono::nanoseconds>> samples) {
+  std::unique_lock<std::mutex> lock(mutex_);
+  for (const auto& sample : samples) {
+    elapsed_[sample.first].push_back(sample.second);
+    stamps_[sample.first].push_back(timestamp);
+  }
+}
+
 void ElapsedTimeRecorder::reset() { instance_.reset(new ElapsedTimeRecorder()); }
 
 std::optional<double> ElapsedTimeRecorder::getLastElapsed(

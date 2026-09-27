@@ -377,20 +377,48 @@ void FrontendModule::updateMesh(const ReconstructionOutput& input) {
   const auto& input_mesh = input.map().getMeshLayer();
   {
     ScopedTimer timer("frontend/mesh_compression", input.timestamp_ns, true, 1, false);
-    mesh_remapping_ = std::make_shared<kimera_pgmo::HashedIndexMapping>();
-    auto mesh = getActiveMesh(input_mesh, input.archived_blocks);
-    VLOG(5) << "[Hydra Frontend] Updating mesh with " << mesh->numBlocks() << " blocks";
-    auto interface = PgmoMeshLayerInterface(*mesh);
-    last_mesh_update_ =
-        mesh_compression_->update(interface, input.timestamp_ns, mesh_remapping_.get());
+    {
+      ScopedTimer stage("frontend/mesh_remapping_replace", input.timestamp_ns, true, 1, false);
+      if (!mesh_remapping_) {
+        mesh_remapping_ = std::make_shared<kimera_pgmo::HashedIndexMapping>();
+      }
+    }
+    std::unique_ptr<PgmoMeshLayerInterface> interface;
+    {
+      ScopedTimer stage("frontend/mesh_interface_setup", input.timestamp_ns, true, 1, false);
+      interface = std::make_unique<PgmoMeshLayerInterface>(input_mesh, input.archived_blocks);
+    }
+    VLOG(5) << "[Hydra Frontend] Updating mesh with " << interface->blockIndices().size() << " blocks";
+    {
+      ScopedTimer stage("frontend/mesh_compressor_core", input.timestamp_ns, true, 1, false);
+      last_mesh_update_ = mesh_compression_->update(*interface, input.timestamp_ns, mesh_remapping_.get(), true);
+    }
+    {
+      ScopedTimer stage("frontend/mesh_temporary_destroy", input.timestamp_ns, true, 1, false);
+      interface.reset();
+    }
+    ScopedTimer bookkeeping("frontend/mesh_timing_bookkeeping", input.timestamp_ns, true, 1, false);
+    const auto& timings = mesh_compression_->update_timings;
+    timing::ElapsedTimeRecorder::instance().recordBatch(input.timestamp_ns, {
+        {"frontend/compressor_archive", timings[0]},
+        {"frontend/compressor_remap", timings[1]},
+        {"frontend/compressor_active_vertices", timings[2]},
+        {"frontend/compressor_active_faces", timings[3]},
+        {"frontend/compressor_archived_faces", timings[4]}});
   }  // end timing scope
 
   {  // start timing scope
     // TODO(nathan) we should probably have a mutex before modifying the mesh, but
     // nothing else uses it at the moment
     ScopedTimer timer("frontend/mesh_update", input.timestamp_ns, true, 1, false);
-    last_mesh_update_->updateMesh(*dsg_->graph->mesh());
-    invalidateMeshEdges(*last_mesh_update_);
+    {
+      ScopedTimer stage("frontend/mesh_delta_apply", input.timestamp_ns, true, 1, false);
+      last_mesh_update_->updateMesh(*dsg_->graph->mesh());
+    }
+    {
+      ScopedTimer stage("frontend/mesh_invalidate_edges", input.timestamp_ns, true, 1, false);
+      invalidateMeshEdges(*last_mesh_update_);
+    }
     // kimera_pgmo::WriteMesh("/home/albert/Desktop/pts/dsg_mesh_" +
     //                     std::to_string(input.timestamp_ns) + ".ply",
     //                     *dsg_->graph->mesh());
@@ -411,7 +439,9 @@ void FrontendModule::updateObjects(const ReconstructionOutput& input) {
       segmenter_->detect(input.timestamp_ns, *last_mesh_update_, std::nullopt);
 
   {  // start dsg critical section
+    ScopedTimer wait("frontend/object_graph_lock_wait", input.timestamp_ns, true, 1, false);
     std::unique_lock<std::mutex> lock(dsg_->mutex);
+    wait.stop();
     segmenter_->updateGraph(input.timestamp_ns,
                             clusters,
                             last_mesh_update_->getTotalArchivedVertices(),
@@ -419,6 +449,7 @@ void FrontendModule::updateObjects(const ReconstructionOutput& input) {
                             input.sensor_data->relations);
     addPlaceObjectEdges(input.timestamp_ns);
     // Clear graph meshes of feature vectors
+    ScopedTimer cleanup("frontend/feature_cleanup", input.timestamp_ns, true, 1, false);
     clearMeshFeatures();
   }  // end dsg critical section
 }
@@ -451,16 +482,26 @@ void FrontendModule::updateDeformationGraph(const ReconstructionOutput& input) {
   PgmoCloud new_vertices;
   std::vector<size_t> new_indices;
   std::vector<pcl::Vertices> new_triangles;
-  deformation_compression_->pruneStoredMesh(time_s - config.pgmo.time_horizon);
+  {
+    ScopedTimer stage("frontend/dgraph_prune", input.timestamp_ns, true, 1, false);
+    deformation_compression_->pruneStoredMesh(time_s - config.pgmo.time_horizon);
+  }
+  {
+    ScopedTimer stage("frontend/dgraph_integrate", input.timestamp_ns, true, 1, false);
   deformation_compression_->compressAndIntegrate(interface,
                                                  new_vertices,
                                                  new_triangles,
                                                  new_indices,
                                                  deformation_remapping_,
                                                  time_s);
+  }
 
   PgmoCloud::Ptr vertices(new PgmoCloud());
-  deformation_compression_->getVertices(vertices);
+  {
+    ScopedTimer stage("frontend/dgraph_copy_vertices", input.timestamp_ns, true, 1, false);
+    deformation_compression_->getVertices(vertices);
+  }
+  ScopedTimer graph_stage("frontend/dgraph_build_graph", input.timestamp_ns, true, 1, false);
 
   std::vector<kimera_pgmo::Edge> new_edges;
   if (new_indices.size() > 0 && new_triangles.size() > 0) {

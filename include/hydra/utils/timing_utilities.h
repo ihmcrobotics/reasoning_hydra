@@ -35,6 +35,8 @@
 #pragma once
 #include <chrono>
 #include <list>
+#include <initializer_list>
+#include <utility>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -74,6 +76,9 @@ class ElapsedTimeRecorder {
   void record(const std::string& timer_name,
               const uint64_t timestamp,
               const std::chrono::nanoseconds elapsed);
+
+  void recordBatch(uint64_t timestamp,
+                   std::initializer_list<std::pair<const char*, std::chrono::nanoseconds>> samples);
 
   void reset();
 

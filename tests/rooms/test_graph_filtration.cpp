@@ -354,4 +354,29 @@ TEST(GraphFiltrationTests, TestBestPlateau) {
   }
 }
 
+TEST(GraphFiltrationTests, IncrementalCountMatchesScanAtEveryStep) {
+  IsolatedSceneGraphLayer layer(1);
+  for (size_t i = 0; i < 100; ++i) {
+    addNode(layer, i, 0.2 + (i % 13) * 0.1);
+  }
+  for (size_t i = 0; i < 99; ++i) {
+    addEdge(layer, i, i + 1, 0.1 + (i % 9) * 0.1);
+    if (i + 7 < 100) addEdge(layer, i, i + 7, 0.15 + (i % 11) * 0.1);
+  }
+  for (size_t minimum : {0u, 1u, 2u, 5u, 100u, 101u}) {
+    for (bool include_nodes : {false, true}) {
+      BarcodeTracker tracker(minimum);
+      getGraphFiltration(layer, tracker, 0.0001,
+          [&](const DisjointSet& components) {
+            size_t expected = 0;
+            for (const auto& entry : components.sizes) {
+              expected += entry.second >= minimum;
+            }
+            EXPECT_EQ(tracker.num_valid_components, expected);
+            return expected;
+          }, include_nodes);
+    }
+  }
+}
+
 }  // namespace hydra

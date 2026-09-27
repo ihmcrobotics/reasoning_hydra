@@ -93,17 +93,31 @@ MergeList UpdateRoomsFunctor::call(const DynamicSceneGraph&,
   }
 
   ScopedTimer timer("backend/room_detection", info->timestamp_ns, true, 1, false);
-  auto places_clone =
-      dsg.graph->getLayer(DsgLayers::PLACES).clone([](const auto& node) {
-        return NodeSymbol(node.id).category() == 'p';
-      });
-
-  // TODO(nathan) pass in timestamp?
-  auto rooms = room_finder->findRooms(*places_clone);
+  ScopedTimer stage("backend/rooms_clone_places", info->timestamp_ns, true, 1, false);
+  const auto& places = dsg.graph->getLayer(DsgLayers::PLACES);
+  const auto is_place = [](const auto& node) {
+    return NodeSymbol(node.id).category() == 'p';
+  };
+  // Room finding only reads this layer. Keep the filtered copy for mixed layers.
+  bool needs_filter = false;
+  for (const auto& entry : places.nodes()) {
+    if (!is_place(*entry.second)) {
+      needs_filter = true;
+      break;
+    }
+  }
+  auto places_clone = needs_filter ? places.clone(is_place) : nullptr;
+  stage.reset("backend/rooms_find");
+  auto rooms = room_finder->findRooms(places_clone ? *places_clone : places,
+                                     info->timestamp_ns);
+  stage.reset("backend/rooms_rewrite");
   rewriteRooms(rooms.get(), *dsg.graph);
+  stage.reset("backend/rooms_place_edges");
   room_finder->addRoomPlaceEdges(*dsg.graph);
 
+  stage.reset("backend/rooms_features");
   computeRoomFeatures(dsg.graph, rooms.get(), info->feature_vector);
+  stage.stop();
 
   return {};
 }

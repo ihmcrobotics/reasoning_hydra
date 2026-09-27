@@ -67,6 +67,8 @@ struct BarcodeTracker : public DisjointSet {
 
   size_t min_component_size;
   LifetimeMap barcodes;
+  // Number of current components meeting min_component_size.
+  size_t num_valid_components = 0;
 };
 
 using Filtration = std::vector<FiltrationInfo>;

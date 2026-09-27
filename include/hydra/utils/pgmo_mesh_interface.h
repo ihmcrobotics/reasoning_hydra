@@ -46,6 +46,9 @@ namespace hydra {
 struct PgmoMeshLayerInterface : public kimera_pgmo::MeshInterface {
   explicit PgmoMeshLayerInterface(const MeshLayer& mesh);
 
+  // Read updated, unarchived blocks without copying their geometry.
+  PgmoMeshLayerInterface(const MeshLayer& mesh, const BlockIndices& archived);
+
   const BlockIndices& blockIndices() const override;
 
   void markBlockActive(const BlockIndex& block) const override;

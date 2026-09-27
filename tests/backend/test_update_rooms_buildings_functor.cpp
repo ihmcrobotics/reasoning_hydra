@@ -36,6 +36,8 @@
 #include <hydra/backend/update_rooms_buildings_functor.h>
 
 #include "hydra_test/shared_dsg_fixture.h"
+#include "hydra_test/config_guard.h"
+#include <spark_dsg/serialization/graph_binary_serialization.h>
 
 namespace hydra {
 
@@ -71,3 +73,54 @@ TEST(UpdateRoomsBuildingsFunctor, BuildingUpdate) {
 }
 
 }  // namespace hydra
+
+TEST(BackendOptimization, DirectPlacesMatchesFilteredCopy) {
+  hydra::test::ConfigGuard guard;
+  auto direct = hydra::test::makeSharedDsg();
+  for (size_t i = 0; i < 40; ++i) {
+    auto attrs = std::make_unique<hydra::PlaceNodeAttributes>();
+    attrs->distance = 1.0 + (i % 4) * 0.2;
+    attrs->position = Eigen::Vector3d(i * 0.1, 0, 0);
+    direct->graph->emplaceNode(hydra::DsgLayers::PLACES,
+                               hydra::NodeSymbol('p', i), std::move(attrs));
+    if (i) {
+      auto edge = std::make_unique<hydra::EdgeAttributes>();
+      edge->weight = 0.1 + (i % 10) * 0.1;
+      direct->graph->insertEdge(hydra::NodeSymbol('p', i-1),
+                                hydra::NodeSymbol('p', i), std::move(edge));
+    }
+  }
+  auto filtered = hydra::test::makeSharedDsg();
+  filtered->graph = direct->graph->clone();
+  // Force the mixed-layer copy path without changing the selected p subgraph.
+  filtered->graph->emplaceNode(hydra::DsgLayers::PLACES,
+      hydra::NodeSymbol('x', 0), std::make_unique<hydra::PlaceNodeAttributes>());
+  hydra::RoomsFunctorConfig config;
+  config.room_finder_config.min_component_size = 2;
+  config.room_finder_config.min_room_size = 2;
+  hydra::UpdateRoomsFunctor a(config), b(config);
+  hydra::UpdateInfo::ConstPtr info(new hydra::UpdateInfo{nullptr,nullptr,false,123,false,{}});
+  const auto unmerged = direct->graph->clone();
+  a.call(*unmerged, *direct, info);
+  b.call(*unmerged, *filtered, info);
+  ASSERT_GT(direct->graph->getLayer(hydra::DsgLayers::ROOMS).numNodes(), 0u);
+  filtered->graph->removeNode(hydra::NodeSymbol('x', 0));
+  std::vector<uint8_t> bytes_a, bytes_b;
+  spark_dsg::io::binary::writeGraph(*direct->graph, bytes_a, true);
+  spark_dsg::io::binary::writeGraph(*filtered->graph, bytes_b, true);
+  EXPECT_EQ(direct->graph->numNodes(), filtered->graph->numNodes());
+  EXPECT_EQ(direct->graph->numEdges(), filtered->graph->numEdges());
+  for (const auto& layer : direct->graph->layers()) {
+    for (const auto& entry : layer.second->nodes()) {
+      ASSERT_TRUE(filtered->graph->hasNode(entry.first));
+      const auto& other = filtered->graph->getNode(entry.first);
+      EXPECT_TRUE(entry.second->attributes() == other.attributes()) << entry.first;
+      EXPECT_EQ(entry.second->getParent(), other.getParent()) << entry.first;
+      EXPECT_EQ(entry.second->siblings(), other.siblings()) << entry.first;
+    }
+  }
+  std::vector<uint8_t> reserved;
+  reserved.reserve(bytes_a.size());
+  spark_dsg::io::binary::writeGraph(*direct->graph, reserved, true);
+  EXPECT_EQ(bytes_a, reserved);
+}

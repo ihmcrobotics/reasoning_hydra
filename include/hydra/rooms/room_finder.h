@@ -58,6 +58,7 @@ class RoomFinder {
   virtual ~RoomFinder();
 
   SceneGraphLayer::Ptr findRooms(const SceneGraphLayer& places);
+  SceneGraphLayer::Ptr findRooms(const SceneGraphLayer& places, uint64_t timestamp_ns);
 
   void addRoomPlaceEdges(DynamicSceneGraph& graph) const;
 

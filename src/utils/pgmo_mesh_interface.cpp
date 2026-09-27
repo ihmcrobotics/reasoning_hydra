@@ -41,6 +41,24 @@ PgmoMeshLayerInterface::PgmoMeshLayerInterface(const MeshLayer& mesh) : mesh_(me
   block_indices_ = mesh.allocatedBlockIndices();
 }
 
+PgmoMeshLayerInterface::PgmoMeshLayerInterface(const MeshLayer& mesh,
+                                             const BlockIndices& archived)
+    : mesh_(mesh) {
+  const BlockIndexSet archived_set(archived.begin(), archived.end());
+  // Match getActiveMesh's hash insertion/traversal order, preserving compressor IDs.
+  // Only block keys are stored; geometry and feature vectors remain in input.
+  MeshLayer::BlockMap selected;
+  for (const auto& index : mesh.updatedBlockIndices()) {
+    if (!archived_set.count(index)) {
+      selected[index] = nullptr;
+    }
+  }
+  block_indices_.reserve(selected.size());
+  for (const auto& entry : selected) {
+    block_indices_.push_back(entry.first);
+  }
+}
+
 const BlockIndices& PgmoMeshLayerInterface::blockIndices() const {
   return block_indices_;
 }
@@ -93,24 +111,24 @@ std::optional<uint16_t> PgmoMeshLayerInterface::getActivePanopticID(
 }
 
 bool PgmoMeshLayerInterface::hasSemantics() const {
-  if (mesh_.numBlocks() == 0) {
+  if (block_indices_.empty()) {
     return false;
   }
-  return mesh_.begin()->has_labels;
+  return mesh_.getBlock(block_indices_.front()).has_labels;
 }
 
 bool PgmoMeshLayerInterface::hasSemanticFeatures() const {
-  if (mesh_.numBlocks() == 0) {
+  if (block_indices_.empty()) {
     return false;
   }
-  return mesh_.begin()->has_semantic_features;
+  return mesh_.getBlock(block_indices_.front()).has_semantic_features;
 }
 
 bool PgmoMeshLayerInterface::hasPanopticIDs() const {
-  if (mesh_.numBlocks() == 0) {
+  if (block_indices_.empty()) {
     return false;
   }
-  return mesh_.begin()->has_panoptic_ids;
+  return mesh_.getBlock(block_indices_.front()).has_panoptic_ids;
 }
 
 kimera_pgmo::MeshInterface::Ptr PgmoMeshLayerInterface::clone() const {

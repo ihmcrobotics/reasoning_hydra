@@ -45,6 +45,7 @@ add_executable(
   utils/test_minimum_spanning_tree.cpp
   utils/test_nearest_neighbor_utilities.cpp
   utils/test_timing_utilities.cpp
+  utils/test_pgmo_mesh_interface.cpp
 )
 target_include_directories(
   test_${PROJECT_NAME} PUBLIC include PRIVATE ${CMAKE_CURRENT_BINARY_DIR}

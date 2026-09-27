@@ -47,6 +47,7 @@ BarcodeTracker::BarcodeTracker(size_t min_component_size)
 
 void BarcodeTracker::addNode(NodeId node, double distance) {
   if (min_component_size <= 1) {
+    ++num_valid_components;
     barcodes.emplace(node, ComponentLifetime{0.0, distance});
   }
 }
@@ -62,10 +63,16 @@ bool BarcodeTracker::doUnion(DisjointSet& components,
   // note that this works: nothing in disjoint set relies on lhs and rhs, just their
   // parents
   const auto rhs_better = node_distances.at(rhs_set) >= node_distances.at(lhs_set);
+  const auto lhs_size = components.sizes.at(lhs_set);
+  const auto rhs_size = components.sizes.at(rhs_set);
   const auto erased = components.doUnion(lhs_set, rhs_set, rhs_better);
   if (!erased) {
     return false;
   }
+
+  num_valid_components -= static_cast<size_t>(lhs_size >= min_component_size);
+  num_valid_components -= static_cast<size_t>(rhs_size >= min_component_size);
+  num_valid_components += static_cast<size_t>(lhs_size + rhs_size >= min_component_size);
 
   if (erased.value() == lhs_set) {
     // mirror the ordering in disjointSet. rhs is always erased, so

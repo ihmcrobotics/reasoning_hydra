@@ -43,6 +43,7 @@
 #include "hydra/common/global_info.h"
 #include "hydra/rooms/graph_filtration.h"
 #include "hydra/rooms/room_utilities.h"
+#include "hydra/utils/timing_utilities.h"
 
 namespace hydra {
 
@@ -159,14 +160,8 @@ InitialClusters RoomFinder::getBestComponents(const SceneGraphLayer& places) con
       places,
       tracker,
       config_.dilation_diff_threshold_m,
-      [this](const DisjointSet& components) -> size_t {
-        size_t num_components = 0;
-        for (const auto id_size_pair : components.sizes) {
-          if (id_size_pair.second >= config_.min_component_size) {
-            ++num_components;
-          }
-        }
-        return num_components;
+      [&tracker](const DisjointSet&) -> size_t {
+        return tracker.num_valid_components;
       },
       false);
 
@@ -266,6 +261,12 @@ InitialClusters RoomFinder::getBestComponents(const SceneGraphLayer& places) con
 }
 
 SceneGraphLayer::Ptr RoomFinder::findRooms(const SceneGraphLayer& places) {
+  return findRooms(places, 0);
+}
+
+SceneGraphLayer::Ptr RoomFinder::findRooms(const SceneGraphLayer& places,
+                                         uint64_t timestamp_ns) {
+  timing::ScopedTimer stage("backend/rooms_components", timestamp_ns, true, 1, false);
   VLOG(2) << "[Room Finder] Detecting rooms for " << places.numNodes() << " nodes";
 
   const auto components = getBestComponents(places);
@@ -274,6 +275,7 @@ SceneGraphLayer::Ptr RoomFinder::findRooms(const SceneGraphLayer& places) {
     return nullptr;
   }
 
+  stage.reset("backend/rooms_clustering");
   last_results_.clear();
   switch (config_.clustering_mode) {
     case RoomClusterMode::MODULARITY:
@@ -305,6 +307,7 @@ SceneGraphLayer::Ptr RoomFinder::findRooms(const SceneGraphLayer& places) {
     last_results_.fillFromInitialClusters(components);
   }
 
+  stage.reset("backend/rooms_make_layer");
   cluster_room_map_.clear();
   return makeRoomLayer(places);
 }
