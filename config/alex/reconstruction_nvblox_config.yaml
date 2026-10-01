@@ -1,6 +1,8 @@
+# GPU profile: independent map, local radius, CPU mesh and semantic settings.
 # Internal reconstruction: cpu (default), nvblox (experimental GPU fusion), both (comparison).
 ---
-backend: cpu
+backend: nvblox-cpu
+gpu_max_integration_distance_m: 4.0
 # Optional CPU GVD on GPU-derived TSDF in both mode; full readback, no graph output.
 gpu_validate_gvd: false
 map:

@@ -274,6 +274,33 @@ VoxelMeasurement ProjectiveIntegrator::getVoxelMeasurement(
   return measurement;
 }
 
+BlockIndices ProjectiveIntegrator::updateAppearanceBlocks(
+    const BlockIndices& block_indices, const InputData& data, VolumetricMap& map, bool update_color) const {
+  BlockIndices updated;
+  const auto sensor_T_world = data.getSensorPose().cast<float>().inverse();
+  for (const auto& index : block_indices) {
+    auto blocks = map.getBlock(index);
+    if (!blocks.tsdf) continue;
+    bool changed = false;
+    for (size_t i = 0; i < blocks.tsdf->numVoxels(); ++i) {
+      const auto& voxel = blocks.tsdf->getVoxel(i);
+      if (!(voxel.weight > 0) || !std::isfinite(voxel.distance) ||
+          std::abs(voxel.distance) >= map.config.truncation_distance) continue;
+      const auto measurement = getVoxelMeasurement(
+          sensor_T_world * blocks.tsdf->getVoxelPosition(i), data,
+          map.config.truncation_distance, map.config.voxel_size);
+      if (!measurement.valid || !std::isfinite(measurement.sdf) ||
+          std::abs(measurement.sdf) >= map.config.truncation_distance) continue;
+      auto voxels = blocks.getVoxels(i);
+      updateAppearance(data, measurement, map.config.truncation_distance, voxels, update_color);
+      if (voxels.tracking) voxels.tracking->last_observed = data.timestamp_ns;
+      changed = true;
+    }
+    if (changed) { blocks.tsdf->setUpdated(); updated.push_back(index); }
+  }
+  return updated;
+}
+
 void ProjectiveIntegrator::updateVoxel(const InputData& data,
                                        const VoxelMeasurement& measurement,
                                        const float truncation_distance,
@@ -298,13 +325,21 @@ void ProjectiveIntegrator::updateVoxel(const InputData& data,
     voxels.tracking->last_observed = data.timestamp_ns;
   }
 
+  updateAppearance(data, measurement, truncation_distance, voxels);
+}
+
+void ProjectiveIntegrator::updateAppearance(const InputData& data,
+                                           const VoxelMeasurement& measurement,
+                                           float truncation_distance,
+                                           VoxelTuple& voxels, bool update_color) const {
+  auto& tsdf_voxel = *voxels.tsdf;
   // Only merge other quantities near the surface
   if (measurement.sdf >= truncation_distance) {
     return;
   }
 
   // TODO(nathan) refactor into update functions
-  if (!data.color_image.empty()) {
+  if (update_color && !data.color_image.empty()) {
     const auto color = interpolator_->interpolateColor(
         data.color_image, measurement.interpolation_weights);
     const float ratio = measurement.weight / (tsdf_voxel.weight + measurement.weight);

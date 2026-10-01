@@ -139,6 +139,14 @@ class ProjectiveIntegrator {
                     const InputData& data,
                     VolumetricMap& map) const;
 
+  // Associate current observations with existing GPU-derived voxels without
+  // integrating depth again. Returns blocks whose appearance was updated.
+  BlockIndices updateAppearanceBlocks(const BlockIndices& block_indices,
+                                     const InputData& data, VolumetricMap& map, bool update_color = true) const;
+
+  void updateAppearance(const InputData& data, const VoxelMeasurement& measurement,
+                        float truncation_distance, VoxelTuple& voxels, bool update_color = true) const;
+
   void updatePointCloudBlocks(const InputData& data, VolumetricMap& map) const;
 
   /**

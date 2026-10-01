@@ -45,6 +45,12 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 #include "hydra/reconstruction/reconstruction_module.h"
+#include "hydra/reconstruction/reconstruction_backend.h"
+#include "hydra/reconstruction/reconstruction_adapter.h"
+#ifdef HYDRA_ENABLE_NVBLOX_STAGE
+#include "hydra/reconstruction/nvblox_reconstruction_stage.h"
+#include "hydra/reconstruction/nvblox_reconstruction_adapter.h"
+#endif
 
 #include <config_utilities/config.h>
 #include <config_utilities/printing.h>
@@ -72,6 +78,9 @@ using timing::ScopedTimer;
 void declare_config(ReconstructionModule::Config& conf) {
   using namespace config;
   name("ReconstructionConfig");
+  field(conf.backend, "backend");
+  field(conf.gpu_validate_gvd, "gpu_validate_gvd");
+  field(conf.gpu_max_integration_distance_m, "gpu_max_integration_distance_m");
   field(conf.show_stats, "show_stats");
   field(conf.stats_verbosity, "stats_verbosity");
   field(conf.clear_distant_blocks, "clear_distant_blocks");
@@ -131,12 +140,38 @@ ReconstructionModule::ReconstructionModule(const Config& config,
       num_poses_received_(0),
       output_queue_(queue),
       sinks_(Sink::instantiate(config.sinks)) {
+#ifdef HYDRA_ENABLE_NVBLOX_STAGE
+  requireAvailableReconstructionBackend(config.backend, true);
+  if (parseReconstructionBackend(config.backend) == ReconstructionBackend::Both) {
+    gpu_comparison_stage_ = std::make_shared<NvbloxReconstructionStage>(
+        GlobalInfo::instance().getMapConfig().voxel_size, config.tsdf.semantic_integrator.create(), config.gpu_max_integration_distance_m);
+    LOG(INFO) << "Internal nvblox comparison enabled; CPU supplies scene graph. "
+              << "GPU stage integrates RGB-D and meshes, with no semantic export or archival.";
+  }
+#else
+  requireAvailableReconstructionBackend(config.backend);
+#endif
   queue_.reset(new InputPacketQueue());
   queue_->max_size = config.max_input_queue_size;
 
   map_.reset(new VolumetricMap(GlobalInfo::instance().getMapConfig(), true));
-  tsdf_integrator_ = std::make_unique<ProjectiveIntegrator>(config.tsdf);
-  mesh_integrator_ = std::make_unique<MeshIntegrator>(config.mesh);
+#ifdef HYDRA_ENABLE_NVBLOX_STAGE
+  if (parseReconstructionBackend(config.backend) == ReconstructionBackend::NvbloxCpu ||
+      parseReconstructionBackend(config.backend) == ReconstructionBackend::NvbloxGpu) {
+    reconstruction_adapter_ = std::make_unique<NvbloxReconstructionAdapter>(
+        map_->config, config.tsdf, config.mesh,
+        config.clear_distant_blocks ? config.dense_representation_radius_m : -1.0f,
+        config.gpu_max_integration_distance_m,
+        parseReconstructionBackend(config.backend) == ReconstructionBackend::NvbloxGpu);
+    VLOG(1) << "Experimental nvblox depth fusion supplies Hydra reconstruction; "
+              << "semantic association and GVD remain on CPU; meshing follows backend selection. "
+              << "GPU voxel clearing follows Hydra active-radius/clear-distant-block settings.";
+  } else
+#endif
+  {
+    reconstruction_adapter_ =
+        std::make_unique<CpuReconstructionAdapter>(config.tsdf, config.mesh);
+  }
   footprint_integrator_ = config.robot_footprint.create();
 }
 
@@ -259,10 +294,38 @@ bool ReconstructionModule::update(const InputPacket& msg, bool full_update) {
     return false;
   }
 
+#ifdef HYDRA_ENABLE_NVBLOX_STAGE
+  if (gpu_comparison_stage_) {
+    {
+      ScopedTimer timer("reconstruction/nvblox_depth", msg.timestamp_ns);
+      gpu_comparison_stage_->integrate(*data);
+    }
+    {
+      ScopedTimer timer("reconstruction/nvblox_color", msg.timestamp_ns);
+      gpu_comparison_stage_->integrateColor(*data);
+    }
+    {
+      ScopedTimer timer("reconstruction/nvblox_mesh", msg.timestamp_ns);
+      gpu_comparison_stage_->updateMesh();
+    }
+    if (config.gpu_validate_gvd) {
+      ScopedTimer timer("reconstruction/nvblox_gvd_validation", msg.timestamp_ns);
+      gpu_comparison_stage_->validateGvd(
+          msg.timestamp_ns, map_->config, data->world_T_body.translation().cast<float>(),
+          config.clear_distant_blocks ? config.dense_representation_radius_m : -1.0f);
+      VLOG(config.stats_verbosity) << "GPU-derived validation places: "
+                                  << gpu_comparison_stage_->numActiveValidationPlaces() << " active / "
+                                  << gpu_comparison_stage_->numValidationPlaces() << " retained";
+    }
+    VLOG(config.stats_verbosity) << "Internal nvblox TSDF blocks: "
+                                << gpu_comparison_stage_->numBlocks();
+  }
+#endif
+
   BlockIndices updated_blocks;
   {  // timing scope
     ScopedTimer timer("places/tsdf", msg.timestamp_ns);
-    updated_blocks = tsdf_integrator_->updateMap(*data, *map_);
+    updated_blocks = reconstruction_adapter_->integrate(*data, *map_);
   }  // timing scope
 
   updated_blocks_.insert(updated_blocks.begin(), updated_blocks.end());
@@ -279,7 +342,7 @@ bool ReconstructionModule::update(const InputPacket& msg, bool full_update) {
 
   {  // timing scope
     ScopedTimer timer("places/mesh", msg.timestamp_ns);
-    mesh_integrator_->generateMesh(*map_, true, true);
+    reconstruction_adapter_->mesh(*map_);
   }  // timing scope
 
   if (!full_update) {

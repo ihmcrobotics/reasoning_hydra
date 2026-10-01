@@ -70,8 +70,8 @@
 
 namespace hydra {
 
-class ProjectiveIntegrator;
-class MeshIntegrator;
+class ReconstructionAdapter;
+class NvbloxReconstructionStage;
 
 struct EigenMatrixHash {
   std::size_t operator()(const spatial_hash::Index& mat) const {
@@ -100,6 +100,9 @@ class ReconstructionModule : public Module {
                           const ReconstructionOutput&>;
 
   struct Config {
+    std::string backend = "cpu";
+    bool gpu_validate_gvd = false;
+    float gpu_max_integration_distance_m = 3.5f;
     bool show_stats = true;
     int stats_verbosity = 2;
     bool clear_distant_blocks = true;
@@ -158,8 +161,8 @@ class ReconstructionModule : public Module {
   Sink::List sinks_;
 
   std::unique_ptr<VolumetricMap> map_;
-  std::unique_ptr<ProjectiveIntegrator> tsdf_integrator_;
-  std::unique_ptr<MeshIntegrator> mesh_integrator_;
+  std::unique_ptr<ReconstructionAdapter> reconstruction_adapter_;
+  std::shared_ptr<NvbloxReconstructionStage> gpu_comparison_stage_;
   RobotFootprintIntegrator::Ptr footprint_integrator_;
   std::unordered_set<spatial_hash::Index, EigenMatrixHash, EigenMatrixEqual>
       updated_blocks_;
