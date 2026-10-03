@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026, IHMC Robotics Lab.
+All rights reserved.
+-->
+
 # Experimental internal nvblox contract test
 
 Build with `HYDRA_ENABLE_NVBLOX_STAGE=ON` and `HYDRA_ENABLE_TESTS=ON`; run `hydra_nvblox_contract_check` with an NVIDIA GPU available. The ordinary CPU test build does not include this executable.

@@ -1,3 +1,6 @@
+// Copyright (c) 2026, IHMC Robotics Lab.
+// All rights reserved.
+
 #include "hydra/reconstruction/nvblox_reconstruction_stage.h"
 #include "hydra/input/input_data.h"
 #include "hydra/input/camera.h"

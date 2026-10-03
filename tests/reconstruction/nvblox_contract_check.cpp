@@ -1,3 +1,6 @@
+// Copyright (c) 2026, IHMC Robotics Lab.
+// All rights reserved.
+
 #include "hydra/utils/pgmo_mesh_interface.h"
 #include <kimera_pgmo/compression/delta_compression.h>
 #include "hydra/reconstruction/nvblox_reconstruction_stage.h"

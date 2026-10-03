@@ -1,3 +1,6 @@
+// Copyright (c) 2026, IHMC Robotics Lab.
+// All rights reserved.
+
 #include <gtest/gtest.h>
 
 #include "hydra/utils/mesh_utilities.h"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026, IHMC Robotics Lab.
+// All rights reserved.
+
 #pragma once
 #include <memory>
 #include <array>

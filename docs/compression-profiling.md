@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026, IHMC Robotics Lab.
+All rights reserved.
+-->
+
 # Compression profiling baseline
 
 This instrumentation retains the existing algorithms, resolution, callback threading and update frequency. It splits the existing frontend timers; nested durations must not be added to their parent totals.
