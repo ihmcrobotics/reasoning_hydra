@@ -57,6 +57,7 @@
 #include <pcl/segmentation/sac_segmentation.h>
 #undef PCL_NO_PRECOMPILE
 
+#include <cmath>
 #include <queue>
 
 #include "hydra/common/config_utilities.h"
@@ -110,7 +111,9 @@ bool splitFrontier(const std::vector<Eigen::Vector3f>& positions,
   centroidAndCovFromPoints(positions, centroid, cov);
 
   std::pair<float, Eigen::Vector3f> val_vec = getMaxEigenvector<float, 3>(cov);
-  if (val_vec.first < std_threshold) {
+  // A NaN variance or direction would send every point to child2 below
+  if (!std::isfinite(val_vec.first) || !val_vec.second.allFinite() ||
+      val_vec.first < std_threshold) {
     return false;
   }
   for (auto p : positions) {
@@ -134,7 +137,10 @@ void splitAllFrontiers(std::vector<std::vector<Eigen::Vector3f>>& frontiers,
     frontiers.pop_back();
     std::vector<Eigen::Vector3f> child1;
     std::vector<Eigen::Vector3f> child2;
-    if (splitFrontier(frontier, std_threshold, child1, child2)) {
+    // A split that leaves one side empty makes no progress: the same frontier would be
+    // split again forever, stalling the frontend after its first update
+    if (splitFrontier(frontier, std_threshold, child1, child2) && !child1.empty() &&
+        !child2.empty()) {
       if (child1.size() < point_threshold) {
         finished_frontiers.push_back(child1);
       } else {
